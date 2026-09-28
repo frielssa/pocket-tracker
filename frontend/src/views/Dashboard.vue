@@ -1,53 +1,26 @@
 <template>
   <div class="w-full min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-10 box-border">
-    <!-- Header Full Width -->
+    <!-- Header -->
     <header class="w-full flex justify-between items-center pb-6 mb-8 border-b border-neutral-800">
       <div>
         <h1 class="text-3xl font-bold tracking-tight">💰 PocketTracker</h1>
         <p class="text-sm text-neutral-400 mt-1">Sistem Pencatatan Kas & Keuangan Pribadi</p>
       </div>
       <button 
-        @click="showForm = !showForm" 
+        @click="openCreateForm" 
         class="bg-white text-black px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-neutral-200 transition-colors cursor-pointer shadow"
       >
         {{ showForm ? '✕ Tutup Form' : '+ Catat Transaksi' }}
       </button>
     </header>
 
-    <div 
-  v-for="item in transactions" 
-  :key="item.id" 
-  class="flex justify-between items-center p-4 bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-all"
->
-  <div>
-    <p class="font-semibold text-base text-white">{{ item.title }}</p>
-    <div class="flex items-center gap-2 text-xs text-neutral-400 mt-1">
-      <span class="bg-neutral-800 px-2 py-0.5 rounded text-neutral-300">{{ item.category }}</span>
-      <span>•</span>
-      <span>{{ String(item.date).split('T')[0] }}</span>
-    </div>
-  </div>
-
-  <div class="flex items-center gap-4">
-    <div :class="['font-bold text-base', isIncome(item.type) ? 'text-emerald-400' : 'text-rose-400']">
-      {{ isIncome(item.type) ? '+' : '-' }} Rp {{ formatRupiah(item.amount) }}
-    </div>
-
-    <!-- Tombol Hapus Transaksi -->
-    <button 
-      @click="deleteTransaction(item.id)" 
-      class="text-neutral-500 hover:text-rose-500 transition-colors p-1 cursor-pointer"
-      title="Hapus Transaksi"
-    >
-      🗑️
-    </button>
-  </div>
-</div>
     <main class="w-full space-y-8">
-      <!-- Form Input Transaksi -->
+      <!-- Form Input Transaksi (Tambah & Edit) -->
       <section v-if="showForm" class="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl space-y-4 shadow-xl">
-        <h3 class="font-semibold text-xl text-white">Tambah Transaksi Baru</h3>
-        <form @submit.prevent="addTransaction" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <h3 class="font-semibold text-xl text-white">
+          {{ isEditing ? 'Edit Transaksi' : 'Tambah Transaksi Baru' }}
+        </h3>
+        <form @submit.prevent="handleSubmit" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <input 
             v-model="form.title" 
             type="text" 
@@ -86,9 +59,9 @@
           />
           <button 
             type="submit" 
-            class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg lg:col-span-5 transition-colors cursor-pointer shadow"
+            :class="[isEditing ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500', 'text-white font-semibold py-3 rounded-lg lg:col-span-5 transition-colors cursor-pointer shadow']"
           >
-            Simpan Transaksi
+            {{ isEditing ? 'Update Transaksi' : 'Simpan Transaksi' }}
           </button>
         </form>
       </section>
@@ -109,7 +82,6 @@
         </div>
       </section>
 
-    
       <!-- Riwayat Transaksi -->
       <section class="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-lg w-full">
         <h3 class="font-semibold text-xl mb-6 text-white">Riwayat Transaksi</h3>
@@ -122,14 +94,38 @@
           >
             <div>
               <p class="font-semibold text-base text-white">{{ item.title }}</p>
-              <div class="flex gap-2 text-xs text-neutral-400 mt-1">
+              <div class="flex items-center gap-2 text-xs text-neutral-400 mt-1">
                 <span class="bg-neutral-800 px-2 py-0.5 rounded text-neutral-300">{{ item.category }}</span>
                 <span>•</span>
-                <span>{{ item.date }}</span>
+                <span>{{ String(item.date).split('T')[0] }}</span>
               </div>
             </div>
-            <div :class="['font-bold text-base', isIncome(item.type) ? 'text-emerald-400' : 'text-rose-400']">
-              {{ isIncome(item.type) ? '+' : '-' }} Rp {{ formatRupiah(item.amount) }}
+
+            <div class="flex items-center gap-4">
+              <div :class="['font-bold text-base', isIncome(item.type) ? 'text-emerald-400' : 'text-rose-400']">
+                {{ isIncome(item.type) ? '+' : '-' }} Rp {{ formatRupiah(item.amount) }}
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex items-center gap-2">
+                <!-- Tombol Edit -->
+                <button 
+                  @click="editTransaction(item)" 
+                  class="text-neutral-400 hover:text-amber-400 transition-colors p-1 cursor-pointer text-lg"
+                  title="Edit Transaksi"
+                >
+                  ✏️
+                </button>
+
+                <!-- Tombol Hapus -->
+                <button 
+                  @click="deleteTransaction(item.id)" 
+                  class="text-neutral-400 hover:text-rose-500 transition-colors p-1 cursor-pointer text-lg"
+                  title="Hapus Transaksi"
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
           </div>
 
@@ -150,6 +146,8 @@ import axios from 'axios'
 const API_URL = 'http://localhost:8000/api/transactions'
 
 const showForm = ref(false)
+const isEditing = ref(false)
+const editingId = ref(null)
 
 const form = ref({
   title: '',
@@ -169,7 +167,6 @@ const summary = ref({
 const fetchTransactions = async () => {
   try {
     const res = await axios.get(API_URL)
-    // Mengambil data sesuai struktur response controller
     transactions.value = res.data.data || []
     if (res.data.summary) {
       summary.value = res.data.summary
@@ -183,25 +180,61 @@ onMounted(() => {
   fetchTransactions()
 })
 
-const addTransaction = async () => {
+const openCreateForm = () => {
+  if (showForm.value && !isEditing.value) {
+    showForm.value = false
+  } else {
+    resetForm()
+    showForm.value = true
+  }
+}
+
+const editTransaction = (item) => {
+  isEditing.value = true
+  editingId.value = item.id
+  form.value = {
+    title: item.title,
+    amount: item.amount,
+    type: item.type,
+    category: item.category,
+    date: String(item.date).split('T')[0]
+  }
+  showForm.value = true
+}
+
+const resetForm = () => {
+  isEditing.value = false
+  editingId.value = null
+  form.value = {
+    title: '',
+    amount: '',
+    type: 'income',
+    category: '',
+    date: new Date().toISOString().split('T')[0]
+  }
+}
+
+const handleSubmit = async () => {
   if (Number(form.value.amount) < 1000) {
     alert('Nominal transaksi minimal Rp 1.000')
     return
   }
 
   try {
-    await axios.post(API_URL, {
-      ...form.value,
-      amount: Number(form.value.amount)
-    })
+    if (isEditing.value) {
+      await axios.put(`${API_URL}/${editingId.value}`, {
+        ...form.value,
+        amount: Number(form.value.amount)
+      })
+    } else {
+      await axios.post(API_URL, {
+        ...form.value,
+        amount: Number(form.value.amount)
+      })
+    }
     
-    // Refresh data aktual dari backend
     await fetchTransactions()
-
-    // Reset Form
-    form.value.title = ''
-    form.value.amount = ''
-    form.value.category = ''
+    resetForm()
     showForm.value = false
   } catch (err) {
     alert('Gagal menyimpan transaksi. Cek validasi data.')
