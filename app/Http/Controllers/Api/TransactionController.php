@@ -32,6 +32,16 @@ final class TransactionController extends Controller
         ]);
     }
 
+    public function update(StoreTransactionRequest $request, Transaction $transaction): JsonResponse
+    {
+        $transaction->update($request->validated());
+
+        return response()->json([
+        'message' => 'Transaksi berhasil diperbarui',
+        'data'    => $transaction,
+        ]   , 200);
+    }
+
     // POST /api/transactions
     public function store(StoreTransactionRequest $request): JsonResponse
     {
