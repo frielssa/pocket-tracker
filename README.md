@@ -244,7 +244,7 @@ Pastikan `phpunit.xml` memakai database terpisah (mis. SQLite `:memory:`), karen
 | `/api/register` | `POST` | Publik | Mendaftarkan akun baru dan mengembalikan token | `name` wajib, `email` valid & unik, `password` minimal 8 karakter dan sama dengan `password_confirmation` |
 | `/api/login` | `POST` | Publik | Login dan mengembalikan `access_token` | `email` & `password` wajib; kredensial salah → 401 |
 | `/api/logout` | `POST` | Token | Mencabut token yang sedang dipakai | Tanpa token → 401 |
-| `/api/transactions` | `GET` | Token | Daftar transaksi & ringkasan saldo | Mengembalikan array `data` dan objek `summary` (`balance`, `total_income`, `total_expense`) |
+| `/api/transactions` | `GET` | Token | Daftar transaksi & ringkasan saldo milik pengguna, dengan filter opsional | Mengembalikan array `data` dan objek `summary` (`balance`, `total_income`, `total_expense`). Query opsional: `search` (judul/kategori), `period` (`daily`, `weekly`, `monthly`, `yearly`), `month`, `year`, `start_date` + `end_date` |
 | `/api/transactions` | `POST` | Token | Menambah transaksi baru | `title` wajib (bukan spasi saja), `amount` minimal 1.000, `type` = `income`/`expense`, `category` dan `date` wajib |
 | `/api/transactions/{id}` | `PUT` | Token + pemilik | Memperbarui transaksi | Validasi ulang; bukan pemilik → 403; ID tidak ada → 404 |
 | `/api/transactions/{id}` | `DELETE` | Token + pemilik | Menghapus transaksi | Bukan pemilik → 403; ID tidak ada → 404 |
