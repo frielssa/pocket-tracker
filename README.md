@@ -429,15 +429,58 @@ Pastikan `phpunit.xml` memakai database terpisah (mis. SQLite `:memory:`), karen
 
 ---
 
-## 🖼️ 5. Mengunduh Diagram sebagai Gambar
+## Proyek sudah terpasang (Git, PHP ^8.3, Composer, Node.js, dan MySQL).
 
-Sumber diagram tersedia di folder `diagrams/` (`arsitektur.mmd`, `alur-autentikasi.mmd`, `erd.mmd`). Untuk mengekspor ke PNG/SVG:
+1. Clone repository
+bash
+git clone https://github.com/<username>/<nama-repository>.git pocket-tracker-api
+cd pocket-tracker-api
 
-- **Online:** buka [mermaid.live](https://mermaid.live), tempel isi file `.mmd`, lalu pilih **Actions → PNG / SVG**.
-- **CLI:**
-  ```bash
-  npm install -g @mermaid-js/mermaid-cli
-  mmdc -i diagrams/arsitektur.mmd -o diagrams/arsitektur.png -s 2
-  mmdc -i diagrams/alur-autentikasi.mmd -o diagrams/alur-autentikasi.png -s 2
-  mmdc -i diagrams/erd.mmd -o diagrams/erd.png -s 2
-  ```
+Ganti <username> dan <nama-repository> dengan alamat repository GitHub proyek ini. Jika Laragon dipakai, jalankan perintah di folder C:\laragon\www.
+
+2. Siapkan backend (Laravel)
+bash
+composer install
+cp .env.example .env
+php artisan key:generate
+
+Buat database kosong di MySQL (misalnya pocket_tracker), lalu atur koneksinya di file .env:
+
+env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=pocket_tracker
+DB_USERNAME=root
+DB_PASSWORD=
+
+Jalankan migrasi dan seeder, lalu nyalakan server:
+
+bash
+php artisan migrate --seed
+php artisan serve
+
+Backend berjalan di http://localhost:8000.
+
+3. Siapkan frontend (Vue)
+
+Buka terminal baru:
+
+bash
+cd frontend
+npm install
+npm run dev
+
+Frontend berjalan di http://localhost:5173.
+
+4. Buka aplikasi
+
+Akses http://localhost:5173, klik Daftar untuk membuat akun, lalu mulai mencatat transaksi.
+
+Masalah yang sering muncul
+Masalah	Solusi
+Class "..." not found atau folder vendor tidak ada	Jalankan composer install
+No application encryption key has been specified	Jalankan php artisan key:generate
+SQLSTATE[HY000] [1049] Unknown database	Buat database terlebih dahulu dan cocokkan nama di .env
+Frontend menampilkan error 401 atau tidak bisa login	Pastikan php artisan serve berjalan di port 8000
+Perubahan .env tidak terbaca	Jalankan php artisan config:clear
