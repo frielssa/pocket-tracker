@@ -429,58 +429,56 @@ Pastikan `phpunit.xml` memakai database terpisah (mis. SQLite `:memory:`), karen
 
 ---
 
-## Proyek sudah terpasang (Git, PHP ^8.3, Composer, Node.js, dan MySQL).
+## 📥 5. Tutorial Clone Repository
 
-1. Clone repository
-bash
+Ikuti langkah berikut untuk mengunduh (*clone*) proyek ini dan menjalankannya di komputer lokal. Pastikan prasyarat pada bagian **3. Cara Menjalankan Proyek** sudah terpasang (Git, PHP ^8.3, Composer, Node.js, dan MySQL).
+
+### 1. Clone repository
+```bash
 git clone https://github.com/<username>/<nama-repository>.git pocket-tracker-api
 cd pocket-tracker-api
+```
+Ganti `<username>` dan `<nama-repository>` dengan alamat repository GitHub proyek ini. Jika Laragon dipakai, jalankan perintah di folder `C:\laragon\www`.
 
-Ganti <username> dan <nama-repository> dengan alamat repository GitHub proyek ini. Jika Laragon dipakai, jalankan perintah di folder C:\laragon\www.
-
-2. Siapkan backend (Laravel)
-bash
+### 2. Siapkan backend (Laravel)
+```bash
 composer install
 cp .env.example .env
 php artisan key:generate
-
-Buat database kosong di MySQL (misalnya pocket_tracker), lalu atur koneksinya di file .env:
-
-env
+```
+Buat database kosong di MySQL (misalnya `pocket_tracker`), lalu atur koneksinya di file `.env`:
+```env
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=pocket_tracker
 DB_USERNAME=root
 DB_PASSWORD=
-
+```
 Jalankan migrasi dan seeder, lalu nyalakan server:
-
-bash
+```bash
 php artisan migrate --seed
 php artisan serve
+```
+Backend berjalan di `http://localhost:8000`.
 
-Backend berjalan di http://localhost:8000.
-
-3. Siapkan frontend (Vue)
-
+### 3. Siapkan frontend (Vue)
 Buka terminal baru:
-
-bash
+```bash
 cd frontend
 npm install
 npm run dev
+```
+Frontend berjalan di `http://localhost:5173`.
 
-Frontend berjalan di http://localhost:5173.
+### 4. Buka aplikasi
+Akses `http://localhost:5173`, klik **Daftar** untuk membuat akun, lalu mulai mencatat transaksi.
 
-4. Buka aplikasi
-
-Akses http://localhost:5173, klik Daftar untuk membuat akun, lalu mulai mencatat transaksi.
-
-Masalah yang sering muncul
-Masalah	Solusi
-Class "..." not found atau folder vendor tidak ada	Jalankan composer install
-No application encryption key has been specified	Jalankan php artisan key:generate
-SQLSTATE[HY000] [1049] Unknown database	Buat database terlebih dahulu dan cocokkan nama di .env
-Frontend menampilkan error 401 atau tidak bisa login	Pastikan php artisan serve berjalan di port 8000
-Perubahan .env tidak terbaca	Jalankan php artisan config:clear
+### Masalah yang sering muncul
+| Masalah | Solusi |
+| :--- | :--- |
+| `Class "..." not found` atau folder `vendor` tidak ada | Jalankan `composer install` |
+| `No application encryption key has been specified` | Jalankan `php artisan key:generate` |
+| `SQLSTATE[HY000] [1049] Unknown database` | Buat database terlebih dahulu dan cocokkan nama di `.env` |
+| Frontend menampilkan error 401 atau tidak bisa login | Pastikan `php artisan serve` berjalan di port 8000 |
+| Perubahan `.env` tidak terbaca | Jalankan `php artisan config:clear` |
