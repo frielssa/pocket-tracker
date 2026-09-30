@@ -6,6 +6,17 @@ namespace App\Enums;
 
 enum TransactionType: string
 {
-    case Income = 'income';
-    case Expense = 'expense';
+    case INCOME = 'income';
+    case EXPENSE = 'expense';
+
+    /**
+     * Helper untuk mendapatkan label yang readable jika dibutuhkan
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::INCOME  => 'Pemasukan',
+            self::EXPENSE => 'Pengeluaran',
+        };
+    }
 }

@@ -18,10 +18,11 @@ final class StoreTransactionRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'user_id'  => ['nullable', 'exists:users,id'],
             'title'    => ['required', 'string', 'max:255'],
-            'amount'   => ['required', 'numeric', 'gte:1000'], // Minimal Rp 1.000
+            'amount'   => ['required', 'numeric', 'min:0'],
             'type'     => ['required', new Enum(TransactionType::class)],
-            'category' => ['required', 'string', 'max:100'],
+            'category' => ['required', 'string', 'max:255'],
             'date'     => ['required', 'date'],
         ];
     }

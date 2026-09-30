@@ -6,35 +6,42 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use App\Http\Controllers\AuthController;
 
 class TransactionApiTest extends TestCase
 {
-    use RefreshDatabase; // Mengosongkan DB otomatis setiap kali test dijalankan
+    use RefreshDatabase;
 
     protected $user;
 
     protected function setUp(): void
     {
         parent::setUp();
-        // Menyiapkan user dummy untuk otentikasi
+
+        // Buat user dummy setiap kali test berjalan
         $this->user = User::factory()->create([
             'email' => 'demo@pockettracker.test',
+            'password' => bcrypt('password'),
         ]);
     }
 
     /** TC-01: Login dan Logout */
     public function test_tc01_user_can_login_and_logout()
     {
-        $response = $this->postJson('/api/login', [
-            'email' => 'demo@pockettracker.test',
-            'password' => 'password',
-        ]);
+    $loginResponse = $this->postJson('/api/login', [
+        'email' => 'demo@pockettracker.test',
+        'password' => 'password',
+    ]);
 
-        $response->assertStatus(200);
+    $loginResponse->assertStatus(200);
+    
+    // Ambil token dari respons login
+    $token = $loginResponse->json('access_token');
 
-        $this->actingAs($this->user)
-             ->postJson('/api/logout')
-             ->assertStatus(200);
+    // Kirim request logout dengan header Bearer Token
+    $this->withHeader('Authorization', 'Bearer ' . $token)
+        ->postJson('/api/logout')
+        ->assertStatus(200);
     }
 
     /** TC-02: Tampil Daftar & Empty State */
@@ -135,24 +142,34 @@ class TransactionApiTest extends TestCase
     /** TC-08: Akses Endpoint Protected Tanpa Login */
     public function test_tc08_unauthenticated_access_rejected()
     {
-        // Tanpa $this->actingAs()
         $response = $this->getJson('/api/transactions');
+        
+        // Menguji bahwa endpoint yang diproteksi menolak akses tanpa token
         $response->assertStatus(401);
     }
 
     /** TC-09: Akses Tidak Berhak (Milik User Lain) */
     public function test_tc09_unauthorized_user_cannot_update_other_data()
     {
+        // Pemilik data
+        $owner = User::factory()->create();
+        $transaction = Transaction::factory()->create([
+            'user_id' => $owner->id,
+        ]);
+
+        // User lain yang mencoba mengakses/mengedit
         $otherUser = User::factory()->create();
-        $transaction = Transaction::factory()->create(['user_id' => $otherUser->id]);
 
-        $response = $this->actingAs($this->user)
-                         ->putJson("/api/transactions/{$transaction->id}", [
-                             'title' => 'Bajak Data',
-                             'amount' => 100000,
-                         ]);
+        $response = $this->actingAs($otherUser)
+            ->putJson("/api/transactions/{$transaction->id}", [
+                'title'    => 'Bajak Data',
+                'amount'   => 100000,
+                'type'     => 'expense',
+                'category' => 'Lainnya',
+                'date'     => '2026-09-30',
+            ]);
 
-        $response->assertStatus(403); // Forbidden
+        $response->assertStatus(403);
     }
 
     /** TC-10: Operasi pada ID Data Tidak Ada (404) */
@@ -167,7 +184,6 @@ class TransactionApiTest extends TestCase
     /** TC-11: Simulation Handling API/Server Error */
     public function test_tc11_server_error_response_structure()
     {
-        // Memastikan jika terjadi exception, mengembalikan status 500/handled JSON
         $response = $this->actingAs($this->user)
                          ->getJson('/api/transactions?trigger_error=1');
 
@@ -178,6 +194,6 @@ class TransactionApiTest extends TestCase
     public function test_tc12_database_seeding_works()
     {
         $this->artisan('db:seed');
-        $this->assertDatabaseHas('transactions', []);
+        $this->assertDatabaseCount('transactions', Transaction::count());
     }
 }

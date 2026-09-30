@@ -1,17 +1,34 @@
 <template>
   <div class="w-full min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-10 box-border">
     <!-- Header -->
-    <header class="w-full flex justify-between items-center pb-6 mb-8 border-b border-neutral-800">
+    <header class="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 mb-8 border-b border-neutral-800 gap-4">
       <div>
         <h1 class="text-3xl font-bold tracking-tight">💰 PocketTracker</h1>
         <p class="text-sm text-neutral-400 mt-1">Sistem Pencatatan Kas & Keuangan Pribadi</p>
       </div>
-      <button 
-        @click="openCreateForm" 
-        class="bg-white text-black px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-neutral-200 transition-colors cursor-pointer shadow"
-      >
-        {{ showForm ? '✕ Tutup Form' : '+ Catat Transaksi' }}
-      </button>
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Tombol Ekspor CSV -->
+        <button
+          @click="downloadCSV"
+          class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer shadow flex items-center gap-2"
+        >
+          📥 Unduh CSV
+        </button>
+        <!-- Tombol Form Transaksi -->
+        <button
+          @click="openCreateForm"
+          class="bg-white text-black px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-neutral-200 transition-colors cursor-pointer shadow"
+        >
+          {{ showForm ? '✕ Tutup Form' : '+ Catat Transaksi' }}
+        </button>
+        <!-- Tombol Logout -->
+        <button
+          @click="logout"
+          class="border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer"
+        >
+          Keluar
+        </button>
+      </div>
     </header>
 
     <main class="w-full space-y-8">
@@ -21,44 +38,44 @@
           {{ isEditing ? 'Edit Transaksi' : 'Tambah Transaksi Baru' }}
         </h3>
         <form @submit.prevent="handleSubmit" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <input 
-            v-model="form.title" 
-            type="text" 
-            placeholder="Keterangan (misal: Gaji, Makan)" 
-            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full" 
-            required 
+          <input
+            v-model="form.title"
+            type="text"
+            placeholder="Keterangan (misal: Gaji, Makan)"
+            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full"
+            required
           />
-          <input 
-            v-model="form.amount" 
-            type="number" 
+          <input
+            v-model="form.amount"
+            type="number"
             min="1000"
             step="1000"
-            placeholder="Nominal (Min. Rp 1.000)" 
-            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full" 
-            required 
+            placeholder="Nominal (Min. Rp 1.000)"
+            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full"
+            required
           />
-          <select 
-            v-model="form.type" 
+          <select
+            v-model="form.type"
             class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white outline-none cursor-pointer w-full"
           >
             <option value="income">Pemasukan (+)</option>
             <option value="expense">Pengeluaran (-)</option>
           </select>
-          <input 
-            v-model="form.category" 
-            type="text" 
-            placeholder="Kategori (misal: Makanan)" 
-            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full" 
-            required 
+          <input
+            v-model="form.category"
+            type="text"
+            placeholder="Kategori (misal: Makanan)"
+            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full"
+            required
           />
-          <input 
-            v-model="form.date" 
-            type="date" 
-            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white outline-none w-full" 
-            required 
+          <input
+            v-model="form.date"
+            type="date"
+            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white outline-none w-full"
+            required
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             :class="[isEditing ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500', 'text-white font-semibold py-3 rounded-lg lg:col-span-5 transition-colors cursor-pointer shadow']"
           >
             {{ isEditing ? 'Update Transaksi' : 'Simpan Transaksi' }}
@@ -82,14 +99,49 @@
         </div>
       </section>
 
+      <!-- Visualisasi Grafik Ringkasan Bulanan -->
+      <section v-if="chartData.length > 0" class="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-lg w-full space-y-4">
+        <h3 class="font-semibold text-xl text-white">📊 Ringkasan Keuangan Bulanan</h3>
+        <div class="space-y-4 pt-2">
+          <div v-for="item in chartData" :key="item.month" class="bg-neutral-950 p-4 rounded-xl border border-neutral-800 space-y-2">
+            <div class="flex justify-between items-center text-sm font-semibold text-neutral-300">
+              <span>Bulan: {{ item.month }}</span>
+              <span class="text-neutral-400">Net: Rp {{ formatRupiah(item.income - item.expense) }}</span>
+            </div>
+
+            <!-- Bar Pemasukan -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-emerald-400">
+                <span>Pemasukan</span>
+                <span>Rp {{ formatRupiah(item.income) }}</span>
+              </div>
+              <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+                <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" :style="{ width: getPercentage(item.income, item.income + item.expense) + '%' }"></div>
+              </div>
+            </div>
+
+            <!-- Bar Pengeluaran -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-rose-400">
+                <span>Pengeluaran</span>
+                <span>Rp {{ formatRupiah(item.expense) }}</span>
+              </div>
+              <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+                <div class="bg-rose-500 h-full rounded-full transition-all duration-500" :style="{ width: getPercentage(item.expense, item.income + item.expense) + '%' }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Riwayat Transaksi -->
       <section class="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-lg w-full">
         <h3 class="font-semibold text-xl mb-6 text-white">Riwayat Transaksi</h3>
-        
+
         <div class="space-y-3">
-          <div 
-            v-for="item in transactions" 
-            :key="item.id" 
+          <div
+            v-for="item in transactions"
+            :key="item.id"
             class="flex justify-between items-center p-4 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 rounded-xl transition-all"
           >
             <div>
@@ -108,18 +160,16 @@
 
               <!-- Action Buttons -->
               <div class="flex items-center gap-2">
-                <!-- Tombol Edit -->
-                <button 
-                  @click="editTransaction(item)" 
+                <button
+                  @click="editTransaction(item)"
                   class="text-neutral-400 hover:text-amber-400 transition-colors p-1 cursor-pointer text-lg"
                   title="Edit Transaksi"
                 >
                   ✏️
                 </button>
 
-                <!-- Tombol Hapus -->
-                <button 
-                  @click="deleteTransaction(item.id)" 
+                <button
+                  @click="deleteTransaction(item.id)"
                   class="text-neutral-400 hover:text-rose-500 transition-colors p-1 cursor-pointer text-lg"
                   title="Hapus Transaksi"
                 >
@@ -141,9 +191,38 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 
-const API_URL = 'http://localhost:8000/api/transactions'
+const router = useRouter()
+
+const TOKEN_KEY = 'token' // harus sama dengan key yang disimpan di Login.vue
+
+// Instance axios khusus API: token otomatis ditambahkan ke setiap request
+const api = axios.create({
+  baseURL: 'http://localhost:8000/api',
+  headers: { Accept: 'application/json' }
+})
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Jika token kedaluwarsa / tidak valid -> hapus token dan kembali ke halaman login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      router.push('/login')
+    }
+    return Promise.reject(error)
+  }
+)
 
 const showForm = ref(false)
 const isEditing = ref(false)
@@ -158,26 +237,74 @@ const form = ref({
 })
 
 const transactions = ref([])
+const chartData = ref([])
 const summary = ref({
   balance: 0,
   total_income: 0,
   total_expense: 0
 })
 
+// Ambil data transaksi
 const fetchTransactions = async () => {
   try {
-    const res = await axios.get(API_URL)
+    const res = await api.get('/transactions')
     transactions.value = res.data.data || []
     if (res.data.summary) {
       summary.value = res.data.summary
     }
   } catch (err) {
-    console.error('Gagal mengambil data:', err)
+    console.error('Gagal mengambil data transaksi:', err)
+  }
+}
+
+// Ambil data grafik
+const fetchChartData = async () => {
+  try {
+    const res = await api.get('/transactions/chart')
+    chartData.value = res.data.data || []
+  } catch (err) {
+    console.error('Gagal mengambil data grafik:', err)
+  }
+}
+
+// Unduh file CSV
+const downloadCSV = async () => {
+  try {
+    const response = await api.get('/transactions/export', { responseType: 'blob' })
+
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `transactions_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    if (err.response?.status !== 401) alert('Gagal mengunduh CSV.')
+  }
+}
+
+// Logout: beritahu server (cabut token), lalu bersihkan token di browser
+const logout = async () => {
+  try {
+    await api.post('/logout')
+  } catch (err) {
+    // Tetap lanjut logout di sisi browser walau server gagal / token sudah mati
+  } finally {
+    localStorage.removeItem(TOKEN_KEY)
+    router.push('/login')
   }
 }
 
 onMounted(() => {
+  // Tanpa token, tidak ada gunanya memanggil API
+  if (!localStorage.getItem(TOKEN_KEY)) {
+    router.push('/login')
+    return
+  }
   fetchTransactions()
+  fetchChartData()
 })
 
 const openCreateForm = () => {
@@ -221,24 +348,33 @@ const handleSubmit = async () => {
   }
 
   try {
-    if (isEditing.value) {
-      await axios.put(`${API_URL}/${editingId.value}`, {
-        ...form.value,
-        amount: Number(form.value.amount)
-      })
-    } else {
-      await axios.post(API_URL, {
-        ...form.value,
-        amount: Number(form.value.amount)
-      })
+    const payload = {
+      ...form.value,
+      title: form.value.title.trim(),
+      amount: Number(form.value.amount)
     }
-    
+
+    if (isEditing.value) {
+      await api.put(`/transactions/${editingId.value}`, payload)
+    } else {
+      await api.post('/transactions', payload)
+    }
+
     await fetchTransactions()
+    await fetchChartData()
     resetForm()
     showForm.value = false
   } catch (err) {
-    alert('Gagal menyimpan transaksi. Cek validasi data.')
-    console.error(err)
+    if (err.response?.status === 401) return // sudah dialihkan ke login oleh interceptor
+
+    // Tampilkan pesan validasi dari Laravel (422) jika ada
+    const errors = err.response?.data?.errors
+    if (errors) {
+      alert(Object.values(errors).flat().join('\n'))
+    } else {
+      alert('Gagal menyimpan transaksi.')
+    }
+    console.error('Detail Error:', err.response)
   }
 }
 
@@ -246,14 +382,15 @@ const deleteTransaction = async (id) => {
   if (!confirm('Yakin ingin menghapus transaksi ini?')) return
 
   try {
-    await axios.delete(`${API_URL}/${id}`)
+    await api.delete(`/transactions/${id}`)
     await fetchTransactions()
+    await fetchChartData()
   } catch (err) {
-    alert('Gagal menghapus transaksi.')
-    console.error('Gagal menghapus transaksi:', err)
+    if (err.response?.status !== 401) alert('Gagal menghapus transaksi.')
   }
 }
 
 const isIncome = (type) => String(type).toLowerCase() === 'income'
 const formatRupiah = (val) => new Intl.NumberFormat('id-ID').format(val || 0)
+const getPercentage = (value, total) => total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0
 </script>
