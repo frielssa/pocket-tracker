@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'atmorouter' => [
+        'base_url'   => env('ATMO_BASE_URL', 'https://atmorouter.dev/v1'),
+        'key'        => env('ATMO_API_KEY'),
+        'model'      => env('ATMO_MODEL', 'atmo/deepseek-v4.1-flash'),
+        'user_agent' => env('ATMO_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
+    ],
+
 ];

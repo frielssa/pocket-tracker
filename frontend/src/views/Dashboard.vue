@@ -178,6 +178,7 @@
               </div>
             </div>
           </div>
+          <AiChatWidget />
 
           <div v-if="transactions.length === 0" class="text-center py-12 text-neutral-500">
             <p class="text-lg">Belum ada data transaksi.</p>
@@ -193,6 +194,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import AiChatWidget from '@/components/AiChatWidget.vue'
 
 const router = useRouter()
 
@@ -266,6 +268,7 @@ const fetchChartData = async () => {
     console.error('Gagal mengambil data grafik:', err)
   }
 }
+
 
 // Unduh file CSV
 const downloadCSV = async () => {
