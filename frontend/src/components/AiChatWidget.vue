@@ -1,6 +1,6 @@
 <template>
   <div class="fixed bottom-6 right-6 z-50">
-    <!-- Tombol Floating Melayang (Toggle Chat) -->
+    <!-- Tombol Floating (Toggle Chat) -->
     <button
       @click="toggleChat"
       class="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg transition-transform hover:scale-105 focus:outline-none"
@@ -13,23 +13,48 @@
       </svg>
     </button>
 
-    <!-- Jendela Chat Pop-up -->
+    <!-- Jendela Chat -->
     <div
       v-if="isOpen"
       class="absolute bottom-16 right-0 w-80 sm:w-[26rem] h-[520px] bg-gray-900 border border-gray-700 text-gray-100 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
     >
-      <!-- Header Chat -->
+      <!-- Header -->
       <div class="bg-gray-800 p-4 border-b border-gray-700 flex items-center justify-between">
         <div class="flex items-center space-x-2">
           <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
-          <h3 class="font-semibold text-sm">PocketTracker AI Agent</h3>
+          <h3 class="font-semibold text-sm"> PocketTracker AI </h3>
         </div>
-        <button @click="toggleChat" class="text-gray-400 hover:text-white text-xs">Tutup</button>
+        <div class="flex items-center gap-3">
+          <button @click="clearHistory" class="text-gray-400 hover:text-rose-400 text-xs" title="Hapus seluruh riwayat chat">
+            Hapus riwayat
+          </button>
+          <button @click="toggleChat" class="text-gray-400 hover:text-white text-xs">Tutup</button>
+        </div>
       </div>
 
-      <!-- Area Pesan (Chat History) -->
+      <!-- Area pesan -->
       <div ref="chatContainer" class="flex-1 p-4 overflow-y-auto space-y-3 text-sm">
-        <div v-for="(msg, index) in messages" :key="index" :class="msg.role === 'user' ? 'text-right' : 'text-left'">
+        <!-- Pagination riwayat: muat pesan yang lebih lama -->
+        <div v-if="hasMore" class="text-center">
+          <button
+            @click="loadHistory(false)"
+            :disabled="isLoadingHistory"
+            class="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+          >
+            {{ isLoadingHistory ? 'Memuat...' : '↑ Muat pesan lama' }}
+          </button>
+        </div>
+        <p v-else-if="isLoadingHistory" class="text-center text-xs text-gray-500">Memuat riwayat...</p>
+
+        <!-- Sambutan (tampil di awal percakapan) -->
+        <div v-if="!hasMore && !isLoadingHistory" class="text-left">
+          <div
+            class="ai-md inline-block px-3 py-2 rounded-xl max-w-[92%] bg-gray-800 text-gray-200 border border-gray-700 rounded-bl-none"
+            v-html="renderMarkdown(GREETING)"
+          ></div>
+        </div>
+
+        <div v-for="msg in messages" :key="msg.key" :class="msg.role === 'user' ? 'text-right' : 'text-left'">
           <!-- Pesan pengguna: teks biasa -->
           <div
             v-if="msg.role === 'user'"
@@ -78,7 +103,7 @@
           </div>
         </div>
 
-        <!-- Indicator Loading -->
+        <!-- Indikator loading -->
         <div v-if="isLoading" class="text-left">
           <div class="inline-block px-3 py-2 rounded-xl bg-gray-800 text-gray-400 border border-gray-700 text-xs animate-pulse">
             PocketTracker AI sedang bekerja...
@@ -86,7 +111,7 @@
         </div>
       </div>
 
-      <!-- Form Input Prompt -->
+      <!-- Input -->
       <form @submit.prevent="sendMessage" class="p-3 border-t border-gray-700 bg-gray-800 flex gap-2">
         <input
           v-model="promptInput"
@@ -110,50 +135,40 @@
 
 <script setup>
 import { ref, nextTick } from 'vue'
-import axios from 'axios'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import api from '../lib/api'
 
 // Beri tahu Dashboard setiap kali AI berhasil mengubah data (tambah/ubah/hapus)
 const emit = defineEmits(['changed'])
-
-const API_BASE_URL = 'http://localhost:8000/api'
 
 marked.setOptions({ gfm: true, breaks: true })
 
 // Markdown -> HTML, lalu disanitasi agar aman dari XSS sebelum dipakai di v-html
 const renderMarkdown = (text) => DOMPurify.sanitize(marked.parse(text ?? ''))
 
+const GREETING =
+  'Halo! Saya **PocketTracker AI**. Saya bisa menganalisis keuangan Anda dan membantu mencatat transaksi.\n\nContoh: *"Berapa pengeluaran saya bulan ini?"* atau *"Catat makan siang 25 ribu hari ini"*.'
+
 const isOpen = ref(false)
 const isLoading = ref(false)
 const promptInput = ref('')
 const chatContainer = ref(null)
 
-const messages = ref([
-  {
-    role: 'assistant',
-    local: true, // pesan sambutan: tidak dikirim ke AI
-    content:
-      'Halo! Saya **PocketTracker AI**. Saya bisa menganalisis keuangan Anda dan membantu mencatat transaksi.\n\nContoh: *"Berapa pengeluaran saya bulan ini?"* atau *"Catat makan siang 25 ribu hari ini"*.'
-  }
-])
+// Riwayat percakapan
+const messages = ref([])
+const hasMore = ref(false)
+const oldestId = ref(null) // kursor: id pesan tertua yang sudah dimuat dari server
+const historyLoaded = ref(false)
+const isLoadingHistory = ref(false)
 
-const toggleChat = () => {
-  isOpen.value = !isOpen.value
-}
+let keyCounter = 0
+const makeMsg = (partial) => ({ key: ++keyCounter, ...partial })
 
 const scrollToBottom = async () => {
   await nextTick()
   if (chatContainer.value) {
     chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-  }
-}
-
-const authHeaders = () => {
-  const token = localStorage.getItem('token')
-  return {
-    Accept: 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
   }
 }
 
@@ -164,38 +179,101 @@ const errorText = (err) => {
   return err.response?.data?.message || 'Maaf, gagal terhubung ke AI Assistant.'
 }
 
+// Memuat 20 pesan terbaru (pertama kali) atau 20 pesan yang lebih lama (tombol "Muat pesan lama")
+const loadHistory = async (initial = false) => {
+  if (isLoadingHistory.value) return
+  isLoadingHistory.value = true
+
+  const prevHeight = chatContainer.value ? chatContainer.value.scrollHeight : 0
+
+  try {
+    const params = { limit: 20 }
+    if (oldestId.value) params.before_id = oldestId.value
+
+    const res = await api.get('/ai/history', { params })
+    const rows = (res.data?.data || []).map((m) => makeMsg({ id: m.id, role: m.role, content: m.content }))
+
+    if (rows.length) {
+      oldestId.value = rows[0].id
+      messages.value.unshift(...rows)
+    }
+    hasMore.value = !!res.data?.has_more
+    historyLoaded.value = true
+
+    if (initial) {
+      scrollToBottom()
+    } else {
+      // Pertahankan posisi scroll agar tampilan tidak melompat saat pesan lama ditambahkan di atas
+      await nextTick()
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight - prevHeight
+      }
+    }
+  } catch (err) {
+    console.error('Gagal memuat riwayat chat:', err)
+    if (initial) {
+      historyLoaded.value = true
+      messages.value.push(makeMsg({ role: 'assistant', local: true, content: 'Riwayat chat belum dapat dimuat.' }))
+    }
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
+
+const toggleChat = async () => {
+  isOpen.value = !isOpen.value
+  if (isOpen.value) {
+    if (!historyLoaded.value) {
+      await loadHistory(true)
+    } else {
+      scrollToBottom()
+    }
+  }
+}
+
+const clearHistory = async () => {
+  if (!confirm('Hapus seluruh riwayat chat AI? Tindakan ini tidak bisa dibatalkan.')) return
+
+  try {
+    await api.delete('/ai/history')
+    messages.value = []
+    hasMore.value = false
+    oldestId.value = null
+  } catch (err) {
+    messages.value.push(makeMsg({ role: 'assistant', local: true, content: errorText(err) }))
+  }
+}
+
 const sendMessage = async () => {
   const text = promptInput.value.trim()
   if (!text || isLoading.value) return
 
-  messages.value.push({ role: 'user', content: text })
+  messages.value.push(makeMsg({ role: 'user', content: text }))
   promptInput.value = ''
   isLoading.value = true
   scrollToBottom()
 
-  // Kirim riwayat percakapan terakhir agar AI punya konteks
+  // Kirim beberapa pesan terakhir agar AI punya konteks (pesan "local" seperti error tidak ikut)
   const history = messages.value
     .filter((m) => !m.local)
     .slice(-10)
     .map((m) => ({ role: m.role, content: String(m.content).slice(0, 3900) }))
 
   try {
-    const res = await axios.post(
-      `${API_BASE_URL}/ai/ask`,
-      { messages: history },
-      { headers: authHeaders() }
-    )
+    const res = await api.post('/ai/ask', { messages: history })
 
     const actions = (res.data?.actions || []).map((a) => ({ ...a, status: 'pending', error: '' }))
 
-    messages.value.push({
-      role: 'assistant',
-      content: res.data?.reply || 'Tidak ada jawaban dari AI.',
-      actions
-    })
+    messages.value.push(
+      makeMsg({
+        role: 'assistant',
+        content: res.data?.reply || 'Tidak ada jawaban dari AI.',
+        actions
+      })
+    )
   } catch (err) {
     console.error(err)
-    messages.value.push({ role: 'assistant', local: true, content: errorText(err) })
+    messages.value.push(makeMsg({ role: 'assistant', local: true, content: errorText(err) }))
   } finally {
     isLoading.value = false
     scrollToBottom()
@@ -204,18 +282,22 @@ const sendMessage = async () => {
 
 // Menjalankan usulan lewat endpoint REST yang sudah ada (validasi & kepemilikan data tetap diperiksa server)
 const runAction = (action) => {
-  const config = { headers: authHeaders() }
-
   if (action.type === 'create_transaction') {
-    return axios.post(`${API_BASE_URL}/transactions`, action.payload, config)
+    return api.post('/transactions', action.payload)
   }
   if (action.type === 'update_transaction') {
-    return axios.put(`${API_BASE_URL}/transactions/${action.transaction_id}`, action.payload, config)
+    return api.put(`/transactions/${action.transaction_id}`, action.payload)
   }
   if (action.type === 'delete_transaction') {
-    return axios.delete(`${API_BASE_URL}/transactions/${action.transaction_id}`, config)
+    return api.delete(`/transactions/${action.transaction_id}`)
   }
   return Promise.reject(new Error('Jenis aksi tidak dikenal'))
+}
+
+// Catatan hasil aksi masuk ke riwayat (tampil di chat + tersimpan di server + jadi konteks untuk AI)
+const logNote = (content) => {
+  messages.value.push(makeMsg({ role: 'assistant', content }))
+  api.post('/ai/history', { content }).catch(() => {})
 }
 
 const approveAction = async (action) => {
@@ -227,8 +309,7 @@ const approveAction = async (action) => {
   try {
     await runAction(action)
     action.status = 'done'
-    // Catat hasilnya di riwayat supaya AI tahu aksi ini sudah dijalankan
-    messages.value.push({ role: 'assistant', content: `✅ Aksi dijalankan: ${action.summary}` })
+    logNote(`✅ Aksi dijalankan: ${action.summary}`)
     emit('changed')
   } catch (err) {
     action.status = 'error'
@@ -243,7 +324,7 @@ const cancelAction = (action) => {
   if (action.status === 'loading' || action.status === 'done') return
 
   action.status = 'cancelled'
-  messages.value.push({ role: 'assistant', content: `❌ Pengguna membatalkan: ${action.summary}` })
+  logNote(`❌ Pengguna membatalkan: ${action.summary}`)
   scrollToBottom()
 }
 </script>

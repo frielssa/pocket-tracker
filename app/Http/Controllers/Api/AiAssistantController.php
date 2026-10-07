@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\TransactionType;
 use App\Http\Controllers\Controller;
+use App\Models\AiMessage;
+use App\Models\Category;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,7 +31,7 @@ use Illuminate\Support\Str;
  */
 final class AiAssistantController extends Controller
 {
-    private const MAX_STEPS = 4;
+    private const MAX_STEPS = 5;
     private const MAX_ACTIONS = 5;
     private const MAX_AMOUNT = 9999999999;
 
@@ -144,11 +146,24 @@ final class AiAssistantController extends Controller
                 : 'Maaf, saya belum bisa menyelesaikan permintaan itu. Coba ulangi dengan kalimat yang lebih spesifik.';
         }
 
+        // Simpan pertanyaan & jawaban ke riwayat chat (tidak mengganggu respons bila gagal)
+        $this->remember($user, $last['content'], $reply);
+
         return response()->json([
             'status'  => 'success',
             'reply'   => $reply,
             'actions' => $actions,
         ]);
+    }
+
+    private function remember(User $user, string $prompt, string $reply): void
+    {
+        try {
+            AiMessage::create(['user_id' => $user->id, 'role' => 'user', 'content' => $prompt]);
+            AiMessage::create(['user_id' => $user->id, 'role' => 'assistant', 'content' => $reply]);
+        } catch (\Throwable $e) {
+            Log::warning('Gagal menyimpan riwayat chat AI: ' . $e->getMessage());
+        }
     }
 
     // ------------------------------------------------------------------
@@ -176,6 +191,8 @@ PERUBAHAN DATA
 - Tool tersebut hanya membuat USULAN. Data BELUM berubah sampai pengguna menekan tombol "Setujui". Jangan pernah menyatakan transaksi sudah tersimpan, diubah, atau dihapus.
 - Setelah membuat usulan, jelaskan singkat lalu minta pengguna meninjau dan menekan "Setujui".
 - Data transaksi baru: keterangan, nominal (minimal 1000), tipe (income atau expense), kategori, tanggal. Jika tanggal tidak disebut, pakai hari ini. Jika informasi lain kurang, tanyakan dulu.
+- Kategori WAJIB salah satu kategori yang sudah terdaftar. Panggil get_categories (sesuai tipe transaksi) sebelum membuat usulan, lalu pilih yang paling cocok dan tulis nama persis seperti di daftar. Jangan mengarang kategori.
+- Jika tidak ada kategori yang cocok, tanyakan kepada pengguna kategori mana yang ingin dipakai, atau sarankan menambahkannya dulu di halaman Kategori.
 - Untuk mengubah atau menghapus, cari ID dengan get_transactions bila belum tahu. Jika ada beberapa kandidat, tanyakan yang mana.
 
 KEAMANAN
@@ -227,6 +244,19 @@ PROMPT;
             [
                 'type'     => 'function',
                 'function' => [
+                    'name'        => 'get_categories',
+                    'description' => 'Ambil daftar kategori yang terdaftar milik pengguna (nama dan tipe). Wajib dipanggil sebelum membuat atau mengubah kategori pada usulan transaksi.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'type' => $type,
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
                     'name'        => 'propose_create_transaction',
                     'description' => 'Buat USULAN transaksi baru. Belum tersimpan sampai pengguna menyetujui.',
                     'parameters'  => [
@@ -235,7 +265,7 @@ PROMPT;
                             'title'    => ['type' => 'string', 'description' => 'Keterangan transaksi'],
                             'amount'   => ['type' => 'number', 'description' => 'Nominal dalam Rupiah, minimal 1000'],
                             'type'     => $type,
-                            'category' => ['type' => 'string', 'description' => 'Kategori, mis. Makanan, Transport, Gaji'],
+                            'category' => ['type' => 'string', 'description' => 'Nama kategori persis dari get_categories, sesuai tipe transaksi'],
                             'date'     => $date,
                         ],
                         'required'   => ['title', 'amount', 'type', 'category'],
@@ -254,7 +284,7 @@ PROMPT;
                             'title'          => ['type' => 'string'],
                             'amount'         => ['type' => 'number'],
                             'type'           => $type,
-                            'category'       => ['type' => 'string'],
+                            'category'       => ['type' => 'string', 'description' => 'Nama kategori persis dari get_categories, sesuai tipe transaksi'],
                             'date'           => $date,
                         ],
                         'required'   => ['transaction_id'],
@@ -287,7 +317,8 @@ PROMPT;
         return match ($name) {
             'get_transactions'           => $this->toolGetTransactions($user, $args),
             'get_summary'                => $this->toolGetSummary($user, $args),
-            'propose_create_transaction' => $this->toolProposeCreate($args, $actions),
+            'get_categories'             => $this->toolGetCategories($user, $args),
+            'propose_create_transaction' => $this->toolProposeCreate($user, $args, $actions),
             'propose_update_transaction' => $this->toolProposeUpdate($user, $args, $actions),
             'propose_delete_transaction' => $this->toolProposeDelete($user, $args, $actions),
             default                      => ['error' => "Tool '{$name}' tidak dikenal."],
@@ -341,7 +372,7 @@ PROMPT;
         ];
     }
 
-    private function toolProposeCreate(array $args, array &$actions): array
+    private function toolProposeCreate(User $user, array $args, array &$actions): array
     {
         if (count($actions) >= self::MAX_ACTIONS) {
             return ['error' => 'Terlalu banyak usulan sekaligus. Minta pengguna menyetujui yang sudah ada dulu.'];
@@ -365,6 +396,13 @@ PROMPT;
                 'hint'  => 'Minta pengguna melengkapi atau memperbaiki data tersebut.',
             ];
         }
+
+        // Kategori harus salah satu kategori terdaftar milik pengguna (untuk tipe yang sama)
+        [$canonical, $validNames] = $this->resolveCategory($user, $clean['type'], $clean['category']);
+        if ($canonical === null) {
+            return $this->invalidCategory($clean['category'], $clean['type'], $validNames);
+        }
+        $clean['category'] = $canonical;
 
         $payload = [
             'title'    => $clean['title'],
@@ -414,6 +452,19 @@ PROMPT;
             'category' => (string) $transaction->category,
             'date'     => Carbon::parse($transaction->date)->format('Y-m-d'),
         ];
+
+        // Kategori akhir harus valid untuk tipe akhir (termasuk saat hanya tipe yang diubah)
+        $finalType = $clean['type'] ?? $before['type'];
+        $categoryToCheck = $clean['category']
+            ?? (isset($clean['type']) && $clean['type'] !== $before['type'] ? $before['category'] : null);
+
+        if ($categoryToCheck !== null) {
+            [$canonical, $validNames] = $this->resolveCategory($user, $finalType, $categoryToCheck);
+            if ($canonical === null) {
+                return $this->invalidCategory($categoryToCheck, $finalType, $validNames);
+            }
+            $clean['category'] = $canonical;
+        }
 
         $after = array_merge($before, $clean);
 
@@ -475,6 +526,60 @@ PROMPT;
     // ------------------------------------------------------------------
     // Helper
     // ------------------------------------------------------------------
+
+    private function toolGetCategories(User $user, array $args): array
+    {
+        Category::ensureDefaultsFor((int) $user->id);
+
+        $query = Category::query()->where('user_id', $user->id);
+
+        if (isset($args['type']) && in_array($args['type'], [TransactionType::INCOME->value, TransactionType::EXPENSE->value], true)) {
+            $query->where('type', $args['type']);
+        }
+
+        $rows = $query->orderBy('type')->orderBy('name')->get();
+
+        return [
+            'categories' => $rows->map(fn (Category $c) => ['name' => $c->name, 'type' => $c->type])->all(),
+            'note'       => 'Gunakan nama kategori persis seperti di daftar, sesuai tipe transaksi.',
+        ];
+    }
+
+    /**
+     * Cocokkan nama kategori (tanpa membedakan huruf besar/kecil) dengan kategori terdaftar untuk tipe tertentu.
+     *
+     * @return array{0: ?string, 1: array<int, string>}  [nama_resmi atau null, daftar nama valid]
+     */
+    private function resolveCategory(User $user, string $type, string $name): array
+    {
+        Category::ensureDefaultsFor((int) $user->id);
+
+        $names = Category::query()
+            ->where('user_id', $user->id)
+            ->where('type', $type)
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+
+        $wanted = mb_strtolower(trim($name));
+
+        foreach ($names as $candidate) {
+            if (mb_strtolower((string) $candidate) === $wanted) {
+                return [(string) $candidate, $names];
+            }
+        }
+
+        return [null, $names];
+    }
+
+    private function invalidCategory(string $name, string $type, array $validNames): array
+    {
+        return [
+            'error'            => sprintf("Kategori '%s' tidak terdaftar untuk tipe %s.", $name, $type),
+            'valid_categories' => $validNames,
+            'hint'             => 'Pilih salah satu kategori valid yang paling cocok, atau tanyakan kepada pengguna. Jangan mengarang kategori.',
+        ];
+    }
 
     private function proposalCreated(): array
     {

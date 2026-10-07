@@ -21,6 +21,13 @@
         >
           {{ showForm ? '✕ Tutup Form' : '+ Catat Transaksi' }}
         </button>
+        <!-- Tombol Kategori -->
+        <router-link
+          to="/categories"
+          class="border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors cursor-pointer"
+        >
+          🏷️ Kategori
+        </router-link>
         <!-- Tombol Logout -->
         <button
           @click="logout"
@@ -61,13 +68,7 @@
             <option value="income">Pemasukan (+)</option>
             <option value="expense">Pengeluaran (-)</option>
           </select>
-          <input
-            v-model="form.category"
-            type="text"
-            placeholder="Kategori (misal: Makanan)"
-            class="bg-neutral-950 border border-neutral-700 focus:border-white rounded-lg p-3 text-sm text-white placeholder-neutral-500 outline-none w-full"
-            required
-          />
+          <CategorySelect v-model="form.category" :type="form.type" />
           <input
             v-model="form.date"
             type="date"
@@ -178,15 +179,17 @@
               </div>
             </div>
           </div>
-          <AiChatWidget />
-
           <div v-if="transactions.length === 0" class="text-center py-12 text-neutral-500">
             <p class="text-lg">Belum ada data transaksi.</p>
             <p class="text-sm mt-1">Klik tombol "+ Catat Transaksi" di atas untuk menambahkan data baru.</p>
           </div>
         </div>
+
+        <Pagination :meta="meta" label="transaksi" @change="goToPage" />
       </section>
     </main>
+
+    <AiChatWidget @changed="refreshAll" />
   </div>
 </template>
 
@@ -195,6 +198,8 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import AiChatWidget from '@/components/AiChatWidget.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
+import Pagination from '@/components/Pagination.vue'
 
 const router = useRouter()
 
@@ -246,17 +251,36 @@ const summary = ref({
   total_expense: 0
 })
 
-// Ambil data transaksi
+// Pagination riwayat transaksi
+const PER_PAGE = 10
+const currentPage = ref(1)
+const meta = ref(null)
+
+// Ambil data transaksi (per halaman). Ringkasan saldo tetap dihitung dari seluruh data.
 const fetchTransactions = async () => {
   try {
-    const res = await api.get('/transactions')
+    const res = await api.get('/transactions', {
+      params: { page: currentPage.value, per_page: PER_PAGE }
+    })
     transactions.value = res.data.data || []
+    meta.value = res.data.meta || null
     if (res.data.summary) {
       summary.value = res.data.summary
+    }
+
+    // Halaman saat ini sudah kosong (mis. item terakhir di halaman itu baru dihapus): mundur ke halaman terakhir
+    if (transactions.value.length === 0 && meta.value && currentPage.value > meta.value.last_page) {
+      currentPage.value = Math.max(1, meta.value.last_page)
+      return fetchTransactions()
     }
   } catch (err) {
     console.error('Gagal mengambil data transaksi:', err)
   }
+}
+
+const goToPage = async (page) => {
+  currentPage.value = page
+  await fetchTransactions()
 }
 
 // Ambil data grafik
@@ -269,6 +293,12 @@ const fetchChartData = async () => {
   }
 }
 
+
+// Muat ulang semua data (dipanggil setelah AI Agent mengubah data)
+const refreshAll = async () => {
+  await fetchTransactions()
+  await fetchChartData()
+}
 
 // Unduh file CSV
 const downloadCSV = async () => {
@@ -361,6 +391,7 @@ const handleSubmit = async () => {
       await api.put(`/transactions/${editingId.value}`, payload)
     } else {
       await api.post('/transactions', payload)
+      currentPage.value = 1
     }
 
     await fetchTransactions()

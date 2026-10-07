@@ -65,16 +65,32 @@ final class TransactionController extends Controller
             ]);
         }
 
-        $transactions = (clone $query)
+        $ordered = (clone $query)
             ->orderByDesc('date')
-            ->orderByDesc('id')
-            ->get();
+            ->orderByDesc('id');
 
+        // Pagination bersifat opsional: tanpa ?per_page= perilaku lama (semua data) tetap berlaku
+        $meta = null;
+        if ($request->filled('per_page')) {
+            $paginator = $ordered->paginate(max(1, min(100, (int) $request->input('per_page'))));
+            $transactions = $paginator->items();
+            $meta = [
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'per_page'     => $paginator->perPage(),
+                'total'        => $paginator->total(),
+            ];
+        } else {
+            $transactions = $ordered->get();
+        }
+
+        // Ringkasan saldo dihitung dari seluruh data terfilter (bukan hanya halaman aktif)
         $income = (float) (clone $query)->where('type', TransactionType::INCOME->value)->sum('amount');
         $expense = (float) (clone $query)->where('type', TransactionType::EXPENSE->value)->sum('amount');
 
         return response()->json([
             'data' => $transactions,
+            'meta' => $meta,
             'summary' => [
                 'balance'       => $income - $expense,
                 'total_income'  => $income,
